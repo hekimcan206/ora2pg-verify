@@ -81,6 +81,28 @@ public sealed class CanonicalParityTests(Engines db) : IAsyncLifetime
             cmd.Parameters.Add(new NpgsqlParameter("l", NpgsqlDbType.Text) { Value = (object?)r.L ?? DBNull.Value });
             await cmd.ExecuteNonQueryAsync();
         }
+
+        // The table was created seconds ago; Oracle refuses a read-only snapshot older than that DDL (ORA-01466).
+        // TableComparer retries this itself; the field-level test opens raw sessions, so wait until it settles.
+        for (var attempt = 0; attempt < 15; attempt++)
+        {
+            try
+            {
+                await using var c = await OracleEngine.OpenOracleAsync(db.OracleReader, CancellationToken.None);
+                await using var tx = c.BeginTransaction();
+                await using var cmd = c.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = "SET TRANSACTION READ ONLY";
+                await cmd.ExecuteNonQueryAsync();
+                cmd.CommandText = "SELECT COUNT(*) FROM APP_OWNER.PARITY";
+                await cmd.ExecuteScalarAsync();
+                break;
+            }
+            catch (OracleException ex) when (ex.Number == 1466)
+            {
+                await Task.Delay(1_000);
+            }
+        }
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

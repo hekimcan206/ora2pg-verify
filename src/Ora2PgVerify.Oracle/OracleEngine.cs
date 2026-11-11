@@ -62,6 +62,9 @@ public sealed class OracleEngine(string connectionString) : EngineAdapter
         }
     }
 
+    /// <summary>ORA-01466: the read-only snapshot is older than the last DDL on the table (DDL times have coarse granularity).</summary>
+    public override bool IsRetryableSnapshotError(Exception exception) => exception is OracleException { Number: 1466 };
+
     public override void AddParameter(DbCommand command, string name, object value)
     {
         ArgumentNullException.ThrowIfNull(command);

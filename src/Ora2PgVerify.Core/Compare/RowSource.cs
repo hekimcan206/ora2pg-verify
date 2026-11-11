@@ -89,4 +89,10 @@ public interface IRowSource
     string EngineName { get; }
 
     Task<IRowSourceSession> OpenSessionAsync(CancellationToken ct);
+
+    /// <summary>
+    /// True for errors that mean "the snapshot started too soon after DDL on the table" (Oracle ORA-01466 after a
+    /// CREATE or TRUNCATE in the last few seconds). The comparison is retried with a fresh snapshot.
+    /// </summary>
+    bool IsRetryableSnapshotError(Exception exception) => false;
 }

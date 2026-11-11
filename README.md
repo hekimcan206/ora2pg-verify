@@ -171,9 +171,9 @@ Over a WAN link the 2 M streamed rows would dominate. The chunk-size sweep is wh
 
 ## Tests
 
-**106 tests**, all passing locally and in CI:
+**108 tests**, all passing locally and in CI:
 
-- **94 unit tests** (no database), including:
+- **96 unit tests** (no database), including:
   - **13 FsCheck properties**: the encoding is injective; scale and CHAR padding never matter; an instant
     encodes the same in any offset; and, the core guarantee, for *any* set of deletions, insertions and changes
     and *any* chunk/leaf/bisection setting, the comparison reports exactly the mutated rows, with both

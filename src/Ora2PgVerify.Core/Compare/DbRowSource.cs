@@ -38,6 +38,9 @@ public abstract class EngineAdapter
         return Convert.ToInt64(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>See <see cref="IRowSource.IsRetryableSnapshotError"/>.</summary>
+    public virtual bool IsRetryableSnapshotError(Exception exception) => false;
+
     public virtual decimal ReadDecimal(DbDataReader reader, int ordinal)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -49,6 +52,8 @@ public abstract class EngineAdapter
 public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options) : IRowSource
 {
     public string EngineName => adapter.Dialect.EngineName;
+
+    public bool IsRetryableSnapshotError(Exception exception) => adapter.IsRetryableSnapshotError(exception);
 
     public async Task<IRowSourceSession> OpenSessionAsync(CancellationToken ct)
     {

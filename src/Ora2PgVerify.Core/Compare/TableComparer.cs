@@ -25,6 +25,23 @@ public sealed class TableComparer(CompareOptions options)
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
 
+        // A read-only snapshot taken within seconds of DDL on the table (CREATE, TRUNCATE) is refused by Oracle
+        // (ORA-01466); a fresh snapshot a moment later succeeds. Anything else propagates unchanged.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await CompareOnceAsync(table, source, target, ct);
+            }
+            catch (Exception ex) when (attempt < 4 && (source.IsRetryableSnapshotError(ex) || target.IsRetryableSnapshotError(ex)))
+            {
+                await Task.Delay(TimeSpan.FromSeconds(attempt * 2), ct);
+            }
+        }
+    }
+
+    private async Task<TableComparison> CompareOnceAsync(TableSpec table, IRowSource source, IRowSource target, CancellationToken ct)
+    {
         var total = Stopwatch.StartNew();
         var sessions = await Task.WhenAll(source.OpenSessionAsync(ct), target.OpenSessionAsync(ct));
         await using var s = sessions[0];
