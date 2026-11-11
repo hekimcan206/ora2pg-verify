@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ora2pg-verify</AssemblyName>
+    <RootNamespace>Ora2PgVerify.Cli</RootNamespace>
+    <Description>Oracle to PostgreSQL migration verification: PL/SQL incompatibility scan, chunked row comparison, dual-write audit, HTML report.</Description>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ora2PgVerify.Core\Ora2PgVerify.Core.csproj" />
+    <ProjectReference Include="..\Ora2PgVerify.Oracle\Ora2PgVerify.Oracle.csproj" />
+    <ProjectReference Include="..\Ora2PgVerify.Postgres\Ora2PgVerify.Postgres.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ora2PgVerify.IntegrationTests" />
+  </ItemGroup>
+
+</Project>
