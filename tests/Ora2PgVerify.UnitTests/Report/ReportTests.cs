@@ -7,7 +7,6 @@ using Ora2PgVerify.Report;
 using Ora2PgVerify.Scan;
 using Ora2PgVerify.Scoring;
 using Ora2PgVerify.Synthetic;
-using Ora2PgVerify.UnitTests.Scan;
 using Ora2PgVerify.UnitTests.Support;
 using CompareOptions = Ora2PgVerify.Compare.CompareOptions;
 
@@ -29,7 +28,7 @@ public sealed class ReportTests
             .CompareAsync(TestSpecs.Orders, new InMemoryRowSource("Oracle", src), new InMemoryRowSource("PostgreSQL", tgt));
         comparison = comparison with { Timings = new PhaseTimings(TimeSpan.FromMilliseconds(3), TimeSpan.FromMilliseconds(40), TimeSpan.FromMilliseconds(12), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(60)) };
 
-        var scan = SchemaScanner.Scan(new SchemaFacts("APP_OWNER", ScannerTests.SampleObjects(), [], [], [], [], [], []));
+        var scan = SchemaScanner.Scan(new SchemaFacts("APP_OWNER", SampleSchema.Objects(), [], [], [], [], [], []));
         var mapping = TableSpecBuilder.Build("orders", TestSpecs.OracleOrders, TestSpecs.PostgresOrders).Findings;
         var manifest = new DefectManifest(1, 1, DatasetSize.ForOrders(400),
         [

@@ -1,6 +1,4 @@
-using System.Text;
 using Ora2PgVerify.Model;
-using Ora2PgVerify.Oracle;
 using Ora2PgVerify.Scan;
 using Ora2PgVerify.UnitTests.Support;
 
@@ -13,47 +11,10 @@ public sealed class ScannerTests
 
     private static IReadOnlyList<string> Rules(string type, string text) => [.. ScanText(type, text).Select(f => f.RuleId)];
 
-    /// <summary>Turns the sample script into what ALL_SOURCE / ALL_VIEWS return (no CREATE OR REPLACE, view text after AS).</summary>
-    internal static IReadOnlyList<SourceObject> SampleObjects()
-    {
-        var result = new List<SourceObject>();
-        foreach (var statement in OracleSeeder.Statements(OracleSeeder.Script("plsql.sql")))
-        {
-            var text = statement.StartsWith("CREATE OR REPLACE ", StringComparison.Ordinal) ? statement["CREATE OR REPLACE ".Length..] : statement["CREATE ".Length..];
-            var words = text.Split([' ', '\n', '('], StringSplitOptions.RemoveEmptyEntries);
-            var (type, name) = words[0] == "PACKAGE" && words[1] == "BODY" ? ("PACKAGE BODY", words[2]) : (words[0], words[1]);
-            if (type == "SYNONYM")
-            {
-                continue; // no stored source; reported from the dictionary
-            }
-
-            if (type == "VIEW")
-            {
-                text = text[(text.IndexOf("AS\n", StringComparison.Ordinal) + 3)..];
-            }
-
-            result.Add(new SourceObject("APP_OWNER", name, type, name == "PURGE_REMOTE_COPY" ? "INVALID" : "VALID", text));
-        }
-
-        return result;
-    }
-
-    internal static string Describe(IEnumerable<ScanFinding> findings)
-    {
-        var sb = new StringBuilder();
-        foreach (var f in findings)
-        {
-            sb.Append(f.Severity).Append(' ').Append(f.RuleId).Append(' ').Append(f.ObjectType).Append(' ').Append(f.ObjectName)
-              .Append(f.Line is { } l ? $" line {l}" : "").Append(f.Snippet is { Length: > 0 } s ? $": {s}" : "").Append('\n');
-        }
-
-        return sb.ToString();
-    }
-
     [Fact]
     public void Sample_schema_scan_matches_golden()
     {
-        var facts = new SchemaFacts("APP_OWNER", SampleObjects(),
+        var facts = new SchemaFacts("APP_OWNER", SampleSchema.Objects(),
             [new SequenceFact("APP_OWNER", "ORDER_SEQ", 9999999999999999999999999999m, false, 20)],
             [new SynonymFact("APP_OWNER", "ORD", "APP_OWNER", "ORDERS", null)],
             [],
@@ -62,7 +23,7 @@ public sealed class ScannerTests
             []);
         var result = SchemaScanner.Scan(facts);
 
-        Golden.Verify("scan-sample.txt", Describe(result.Findings));
+        Golden.Verify("scan-sample.txt", SampleSchema.Describe(result.Findings));
         result.Objects[0].Name.Should().Be("BILLING_PKG", "the package body carries the most rework");
         result.Count(Severity.High).Should().BeGreaterThan(5);
     }

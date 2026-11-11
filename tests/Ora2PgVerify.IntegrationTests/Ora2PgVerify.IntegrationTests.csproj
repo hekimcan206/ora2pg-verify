@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="AwesomeAssertions" />
+    <PackageReference Include="Testcontainers" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Oracle" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ora2PgVerify.Core\Ora2PgVerify.Core.csproj" />
+    <ProjectReference Include="..\..\src\Ora2PgVerify.Oracle\Ora2PgVerify.Oracle.csproj" />
+    <ProjectReference Include="..\..\src\Ora2PgVerify.Postgres\Ora2PgVerify.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\Ora2PgVerify.Cli\Ora2PgVerify.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The exact init scripts docker compose uses, so least privilege is tested, not assumed. -->
+    <None Include="..\..\deploy\oracle\init\01-users.sh" Link="db-init\oracle-01-users.sh" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\deploy\postgres\init\01-roles.sh" Link="db-init\postgres-01-roles.sh" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="..\Ora2PgVerify.UnitTests\Support\SampleSchema.cs" Link="Support\SampleSchema.cs" />
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="AwesomeAssertions" />
+  </ItemGroup>
+
+</Project>

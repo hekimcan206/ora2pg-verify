@@ -6,6 +6,7 @@
     <Project Path="src/Ora2PgVerify.Postgres/Ora2PgVerify.Postgres.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Ora2PgVerify.IntegrationTests/Ora2PgVerify.IntegrationTests.csproj" />
     <Project Path="tests/Ora2PgVerify.UnitTests/Ora2PgVerify.UnitTests.csproj" />
   </Folder>
 </Solution>
