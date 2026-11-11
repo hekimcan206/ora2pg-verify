@@ -61,8 +61,22 @@ public abstract partial class SqlDialect
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(o);
         var v = ValueExpression(c, o);
-        return $"CASE WHEN {v} IS NULL THEN '~' ELSE {ByteLength(v)} || ':' || {v} END";
+        // Test the column itself when the canonical value is NULL exactly when the column is: one evaluation less per row.
+        var isNull = ValueMayBeNullForNonNullColumn(c, o) ? $"{v} IS NULL" : $"{Column(c)} IS NULL";
+        var length = FixedLength(c) is { } n ? Inv($"'{n}'") : ByteLength(v);
+        return $"CASE WHEN {isNull} THEN '~' ELSE {length} || ':' || {v} END";
     }
+
+    /// <summary>True when the canonical value can be NULL although the column is not (RTRIM of blanks, '' treated as NULL).</summary>
+    protected virtual bool ValueMayBeNullForNonNullColumn(ColumnPair c, CanonicalOptions o) => c.Kind == CanonicalKind.FixedChar;
+
+    /// <summary>Byte length of the canonical text when it is fixed for the kind (timestamps), so no LENGTH call is needed.</summary>
+    protected virtual int? FixedLength(ColumnPair c) => c?.Kind switch
+    {
+        CanonicalKind.Timestamp => 26,
+        CanonicalKind.TimestampTz => 27,
+        _ => null,
+    };
 
     public string RowString(TableSpec t, CanonicalOptions o)
     {

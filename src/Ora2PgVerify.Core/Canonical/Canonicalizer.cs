@@ -107,7 +107,11 @@ public static class Canonicalizer
                 return canonicalKey;
             }
 
-            var len = int.Parse(Encoding.ASCII.GetString(bytes, i, colon - i), CultureInfo.InvariantCulture);
+            if (!int.TryParse(Encoding.ASCII.GetString(bytes, i, colon - i), NumberStyles.None, CultureInfo.InvariantCulture, out var len) || colon + 1 + len > bytes.Length)
+            {
+                return canonicalKey;
+            }
+
             parts.Add(Utf8.GetString(bytes, colon + 1, len));
             i = colon + 1 + len;
         }

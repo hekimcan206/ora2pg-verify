@@ -35,6 +35,8 @@ public sealed class OracleDialect : SqlDialect
         var col = Column(c);
         return c.Kind switch
         {
+            // Integer columns never print a fraction, so the leading-zero repair (a regular expression per row) is skipped.
+            CanonicalKind.Number when c.IntegerValued => $"TO_CHAR({col}, 'TM9')",
             CanonicalKind.Number => $"REGEXP_REPLACE(TO_CHAR({col}, 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,'''), '^(-?)\\.', '\\10.')",
             CanonicalKind.Date => $"TO_CHAR({col}, 'YYYY-MM-DD\"T\"HH24:MI:SS')",
             CanonicalKind.Timestamp => $"TO_CHAR({col}, 'YYYY-MM-DD\"T\"HH24:MI:SS.FF6')",
@@ -82,6 +84,8 @@ public sealed class OracleDialect : SqlDialect
         return HexDigest(col, o.Hash);
     }
 
+
+    protected override int? FixedLength(ColumnPair c) => c is { Kind: CanonicalKind.Date } ? 19 : base.FixedLength(c!);
     protected override string ByteLength(string expr) => $"LENGTHB({expr})";
 
     public override string HexDigest(string textExpr, RowHashAlgorithm algorithm) =>

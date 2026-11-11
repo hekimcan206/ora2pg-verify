@@ -59,6 +59,9 @@ public sealed class PostgresDialect : SqlDialect
         return $"CASE WHEN {nullTest} THEN '~' ELSE '{o.DigestHexLength}:' || {HexDigest($"{col}::text", o.Hash)} END";
     }
 
+
+    protected override bool ValueMayBeNullForNonNullColumn(ColumnPair c, CanonicalOptions o) =>
+        base.ValueMayBeNullForNonNullColumn(c, o) || (c?.Kind == CanonicalKind.Text && o?.EmptyStrings == EmptyStringPolicy.AsNull);
     protected override string ByteLength(string expr) => $"octet_length({expr})::text";
 
     public override string HexDigest(string textExpr, RowHashAlgorithm algorithm) =>
