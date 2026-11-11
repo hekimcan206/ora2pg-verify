@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Ora2PgVerify</RootNamespace>
+    <Description>Engine-neutral core of ora2pg-verify: type mapping, canonicalisation, SQL generation, chunked comparison, dual-write audit, PL/SQL scanner and HTML report.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Bogus" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ora2PgVerify.UnitTests" />
+    <InternalsVisibleTo Include="Ora2PgVerify.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

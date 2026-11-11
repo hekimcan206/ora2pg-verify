@@ -1,0 +1,31 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+publish/
+
+# Tests and coverage
+TestResults/
+coverage/
+*.coverage
+*.cobertura.xml
+
+# IDEs
+.vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# Secrets and local environment
+.env
+appsettings.*.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Benchmark run output (curated results live in benchmarks/results)
+benchmarks/BenchmarkDotNet.Artifacts/

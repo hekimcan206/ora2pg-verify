@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ora2PgVerify.Core/Ora2PgVerify.Core.csproj" />
+  </Folder>
+</Solution>
