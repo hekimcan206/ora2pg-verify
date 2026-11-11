@@ -60,6 +60,7 @@ public sealed class DualWriteSimulator(IAccountWriter oracle, IAccountWriter pos
         var rnd = new Random(options.Seed);
         var balances = new Dictionary<long, decimal>();
         var poisoned = new HashSet<long>();
+        var lastDue = new Dictionary<long, DateTimeOffset>();
         var faults = new List<InjectedFault>();
         var pending = new PriorityQueue<(long Id, decimal Balance, DateTime UpdatedAt), DateTimeOffset>();
         var sw = Stopwatch.StartNew();
@@ -84,7 +85,14 @@ public sealed class DualWriteSimulator(IAccountWriter oracle, IAccountWriter pos
             balances[id] = balance;
             await oracle.UpdateAccountAsync(id, balance, stamp, ct);
 
+            // Honest writes keep per-account order (a partitioned queue): only the injected StaleOverwrite reorders them.
             var due = now + TimeSpan.FromMilliseconds(rnd.NextDouble() * options.MaxLag.TotalMilliseconds);
+            if (lastDue.TryGetValue(id, out var previousDue) && due <= previousDue)
+            {
+                due = previousDue + TimeSpan.FromTicks(1);
+            }
+
+            lastDue[id] = due;
             if (plan.TryGetValue(writes, out var fault))
             {
                 poisoned.Add(id);

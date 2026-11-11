@@ -152,7 +152,8 @@ public sealed class OracleSeeder(string ownerConnectionString)
     public async Task ReloadAccountsAsync(SyntheticData data, DatasetSize size, CancellationToken ct)
     {
         await using var c = await OracleEngine.OpenOracleAsync(ownerConnectionString, ct);
-        await ExecAsync(c, "TRUNCATE TABLE ACCOUNTS", ct);
+        // DELETE, not TRUNCATE: DDL right before a read-only snapshot makes Oracle refuse the read (ORA-01466).
+        await ExecAsync(c, "DELETE FROM ACCOUNTS", ct);
         await LoadAccountsAsync(c, data, size, ct);
     }
 
