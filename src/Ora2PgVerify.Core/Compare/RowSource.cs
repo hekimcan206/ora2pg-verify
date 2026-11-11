@@ -35,16 +35,21 @@ public sealed class SideMetrics
 {
     private long _queries;
     private long _rowsTransferred;
+    private long _busyTicks;
 
     public long Queries => Interlocked.Read(ref _queries);
 
     /// <summary>Result rows that crossed the network (fingerprint rows, digests, field rows or raw rows).</summary>
     public long RowsTransferred => Interlocked.Read(ref _rowsTransferred);
 
-    public void AddQuery(long rows)
+    /// <summary>Time spent waiting on this engine (execute and fetch), summed over queries.</summary>
+    public TimeSpan Busy => TimeSpan.FromTicks(Interlocked.Read(ref _busyTicks));
+
+    public void AddQuery(long rows, TimeSpan elapsed = default)
     {
         Interlocked.Increment(ref _queries);
         Interlocked.Add(ref _rowsTransferred, rows);
+        Interlocked.Add(ref _busyTicks, elapsed.Ticks);
     }
 }
 

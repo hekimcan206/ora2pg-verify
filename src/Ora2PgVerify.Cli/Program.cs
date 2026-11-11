@@ -24,7 +24,7 @@ var oracleSchemaOpt = new Option<string>("--oracle-schema") { Description = "Ora
 var postgresSchemaOpt = new Option<string>("--postgres-schema") { Description = "PostgreSQL schema", DefaultValueFactory = _ => SyntheticSchema.PostgresSchema };
 var tablesOpt = new Option<string[]>("--tables") { Description = "Tables to compare (default: every table present on both sides)", AllowMultipleArgumentsPerToken = true };
 var strategyOpt = new Option<string>("--strategy") { Description = "db (pushdown, default) or client (stream every row and hash in .NET)", DefaultValueFactory = _ => "db" };
-var chunkOpt = new Option<long>("--chunk-rows") { Description = "Target rows per chunk", DefaultValueFactory = _ => 10_000 };
+var chunkOpt = new Option<long>("--chunk-rows") { Description = "Target rows per chunk (1,000 measured best on 1 M rows)", DefaultValueFactory = _ => 1_000 };
 var hashOpt = new Option<string>("--hash") { Description = "md5 (default) or sha256", DefaultValueFactory = _ => "md5" };
 var emptyAsNullOpt = new Option<bool>("--empty-as-null") { Description = "Treat '' in PostgreSQL as NULL instead of reporting it" };
 var valuesOpt = new Option<bool>("--include-values") { Description = "Put the values of differing columns into the report (off: keys and column names only)" };
@@ -178,15 +178,16 @@ demo.SetAction(async (p, ct) =>
 var runsOpt = new Option<int>("--runs") { Description = "Measured runs per configuration (after one warm-up)", DefaultValueFactory = _ => 5 };
 var outOpt = new Option<string>("--out") { Description = "Directory for benchmark results", DefaultValueFactory = _ => "benchmarks/results" };
 var noteOpt = new Option<string?>("--host-note") { Description = "Free text about host load, stored with the results" };
+var groupsOpt = new Option<string[]>("--groups") { Description = "Only these groups: strategy, hash, chunk (default: all)", AllowMultipleArgumentsPerToken = true };
 var bench = new Command("bench", "Measure strategies, chunk sizes and hash algorithms on an already seeded database")
 {
-    oracleOpt, postgresOpt, expectOpt, runsOpt, outOpt, noteOpt,
+    oracleOpt, postgresOpt, expectOpt, runsOpt, outOpt, noteOpt, groupsOpt,
 };
 bench.SetAction(async (p, ct) =>
 {
     var oracle = Connections.Resolve(p.GetValue(oracleOpt), Connections.OracleEnv, "Oracle");
     var postgres = Connections.Resolve(p.GetValue(postgresOpt), Connections.PostgresEnv, "PostgreSQL");
-    await new Bench(flows, log).RunAsync(oracle, postgres, p.GetValue(expectOpt), p.GetValue(runsOpt), p.GetValue(outOpt)!, p.GetValue(noteOpt), ct);
+    await new Bench(flows, log).RunAsync(oracle, postgres, p.GetValue(expectOpt), p.GetValue(runsOpt), p.GetValue(outOpt)!, p.GetValue(noteOpt), p.GetValue(groupsOpt) ?? [], ct);
     return 0;
 });
 

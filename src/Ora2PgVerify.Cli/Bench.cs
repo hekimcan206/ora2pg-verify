@@ -28,14 +28,16 @@ internal sealed record BenchRow(
     double DrillDownMs,
     long Queries,
     long RowsTransferred,
-    int DifferingRows);
+    int DifferingRows,
+    double OracleBusyMs,
+    double PostgresBusyMs);
 
 internal sealed record BenchResult(string Environment, string? HostNote, DateTimeOffset At, IReadOnlyList<BenchRow> Rows, DetectionScore? Detection, double ScanMedianMs, int ScanFindings);
 
 /// <summary>Repeatable measurements on a seeded database: one warm-up run, then the median of N runs per configuration.</summary>
 internal sealed class Bench(Workflows flows, TextWriter log)
 {
-    public async Task RunAsync(string oracle, string postgres, string? manifestPath, int runs, string outDir, string? note, CancellationToken ct)
+    public async Task RunAsync(string oracle, string postgres, string? manifestPath, int runs, string outDir, string? note, IReadOnlyCollection<string> groups, CancellationToken ct)
     {
         await using var pg = PostgresEngine.CreateDataSource(postgres);
         var (specs, _) = await flows.PlanAsync(oracle, pg, SyntheticSchema.OracleSchema, SyntheticSchema.PostgresSchema, SyntheticSchema.ComparedTables, ct);
@@ -44,6 +46,11 @@ internal sealed class Bench(Workflows flows, TextWriter log)
 
         async Task Measure(string group, string config, TableSpec spec, CompareOptions o, int n)
         {
+            if (groups.Count > 0 && !groups.Contains(group))
+            {
+                return;
+            }
+
             var source = new DbRowSource(new OracleEngine(oracle), o.Canonical);
             var target = new DbRowSource(new PostgresEngine(pg), o.Canonical);
             var comparer = new TableComparer(o);
@@ -58,7 +65,8 @@ internal sealed class Bench(Workflows flows, TextWriter log)
             var median = results.OrderBy(r => r.Timings.Total).ElementAt(results.Count / 2);
             var row = new BenchRow(group, config, spec.Name, Math.Max(median.Source.Rows, median.Target.Rows), n, totals[n / 2], totals[0], totals[^1],
                 median.Timings.Fingerprint.TotalMilliseconds, median.Timings.DrillDown.TotalMilliseconds,
-                median.Source.Queries + median.Target.Queries, median.Source.RowsTransferred + median.Target.RowsTransferred, median.Diffs.Count);
+                median.Source.Queries + median.Target.Queries, median.Source.RowsTransferred + median.Target.RowsTransferred, median.Diffs.Count,
+                median.Source.Busy.TotalMilliseconds, median.Target.Busy.TotalMilliseconds);
             rows.Add(row);
             log.WriteLine(string.Create(CultureInfo.InvariantCulture, $"{group,-9} {config,-34} {spec.Name,-16} median {row.MedianMs,9:N0} ms  (min {row.MinMs:N0}, max {row.MaxMs:N0})  transferred {row.RowsTransferred,9:N0}  diffs {row.DifferingRows}"));
         }
@@ -66,15 +74,21 @@ internal sealed class Bench(Workflows flows, TextWriter log)
         var md5 = new CanonicalOptions();
         foreach (var spec in specs)
         {
-            await Measure("strategy", "database-side, MD5, 10k-row chunks", spec, new CompareOptions { Canonical = md5 }, runs);
+            await Measure("strategy", "database-side, MD5, 10k-row chunks", spec, new CompareOptions { ChunkRows = 10_000, Canonical = md5 }, runs);
             await Measure("strategy", "client-side, MD5", spec, new CompareOptions { Strategy = CompareStrategy.ClientSide, Canonical = md5 }, runs);
         }
 
-        await Measure("hash", "database-side, SHA-256, 10k-row chunks", orders, new CompareOptions { Canonical = md5 with { Hash = RowHashAlgorithm.Sha256 } }, runs);
+        await Measure("hash", "database-side, SHA-256, 10k-row chunks", orders, new CompareOptions { ChunkRows = 10_000, Canonical = md5 with { Hash = RowHashAlgorithm.Sha256 } }, runs);
 
-        foreach (var chunk in new long[] { 1_000, 10_000, 100_000, 1_000_000 })
+        foreach (var chunk in new long[] { 500, 1_000, 2_000, 5_000, 10_000, 100_000, 1_000_000 })
         {
             await Measure("chunk", string.Create(CultureInfo.InvariantCulture, $"database-side, {chunk:N0}-row chunks"), orders, new CompareOptions { ChunkRows = chunk, Canonical = md5 }, Math.Min(runs, 3));
+        }
+
+        var customers = specs.Single(s => s.Name == "customers");
+        foreach (var chunk in new long[] { 100, 1_000, 10_000 })
+        {
+            await Measure("chunk", string.Create(CultureInfo.InvariantCulture, $"database-side, {chunk:N0}-row buckets"), customers, new CompareOptions { ChunkRows = chunk, Canonical = md5 }, Math.Min(runs, 3));
         }
 
         var scans = new List<double>();
@@ -99,8 +113,9 @@ internal sealed class Bench(Workflows flows, TextWriter log)
         var env = $"{RuntimeInformation.OSDescription}; {RuntimeInformation.ProcessArchitecture}; {Environment.ProcessorCount} logical CPUs; .NET {Environment.Version}";
         var result2 = new BenchResult(env, note, DateTimeOffset.UtcNow, rows, detection, scans.Order().ElementAt(scans.Count / 2), findings);
         Directory.CreateDirectory(outDir);
-        await File.WriteAllTextAsync(Path.Combine(outDir, "bench.json"), JsonSerializer.Serialize(result2, VerificationReport.JsonOptions), ct);
-        await File.WriteAllTextAsync(Path.Combine(outDir, "bench.md"), Markdown(result2), ct);
+        var name = groups.Count > 0 ? "bench-" + string.Join("-", groups) : "bench";
+        await File.WriteAllTextAsync(Path.Combine(outDir, name + ".json"), JsonSerializer.Serialize(result2, VerificationReport.JsonOptions), ct);
+        await File.WriteAllTextAsync(Path.Combine(outDir, name + ".md"), Markdown(result2), ct);
         log.WriteLine($"results written to {outDir}");
     }
 
@@ -113,12 +128,12 @@ internal sealed class Bench(Workflows flows, TextWriter log)
             sb.AppendLine().AppendLine(CultureInfo.InvariantCulture, $"Host: {r.HostNote}");
         }
 
-        sb.AppendLine().AppendLine("| group | configuration | table | rows | runs | median ms | min | max | fingerprint ms | drill-down ms | queries | rows transferred | differing rows |")
-          .AppendLine("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+        sb.AppendLine().AppendLine("| group | configuration | table | rows | runs | median ms | min | max | fingerprint ms | drill-down ms | Oracle busy ms | PostgreSQL busy ms | queries | rows transferred | differing rows |")
+          .AppendLine("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
         foreach (var x in r.Rows)
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
-                $"| {x.Group} | {x.Configuration} | {x.Table} | {x.Rows:N0} | {x.Runs} | {x.MedianMs:N0} | {x.MinMs:N0} | {x.MaxMs:N0} | {x.FingerprintMs:N0} | {x.DrillDownMs:N0} | {x.Queries:N0} | {x.RowsTransferred:N0} | {x.DifferingRows} |");
+                $"| {x.Group} | {x.Configuration} | {x.Table} | {x.Rows:N0} | {x.Runs} | {x.MedianMs:N0} | {x.MinMs:N0} | {x.MaxMs:N0} | {x.FingerprintMs:N0} | {x.DrillDownMs:N0} | {x.OracleBusyMs:N0} | {x.PostgresBusyMs:N0} | {x.Queries:N0} | {x.RowsTransferred:N0} | {x.DifferingRows} |");
         }
 
         sb.AppendLine().AppendLine(CultureInfo.InvariantCulture, $"PL/SQL scan: median {r.ScanMedianMs:N0} ms, {r.ScanFindings} findings.");

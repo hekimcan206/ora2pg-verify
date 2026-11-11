@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using Ora2PgVerify.Canonical;
@@ -74,6 +75,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
 
         public async Task<KeyStats> GetKeyStatsAsync(TableSpec table, CancellationToken ct)
         {
+            var started = Stopwatch.GetTimestamp();
             await using var cmd = Command(D.KeyStatsQuery(table));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             await r.ReadAsync(ct);
@@ -81,7 +83,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
                 adapter.ReadInt64(r, 0),
                 r.IsDBNull(1) ? null : adapter.ReadInt64(r, 1),
                 r.IsDBNull(2) ? null : adapter.ReadInt64(r, 2));
-            Metrics.AddQuery(1);
+            Metrics.AddQuery(1, Stopwatch.GetElapsedTime(started));
             return stats;
         }
 
@@ -103,6 +105,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
 
         private async Task<IReadOnlyDictionary<long, ChunkHash>> ChunksAsync(DbCommand cmd, CancellationToken ct)
         {
+            var started = Stopwatch.GetTimestamp();
             await using var _ = cmd;
             var result = new Dictionary<long, ChunkHash>();
             await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -112,7 +115,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
                 result[adapter.ReadInt64(r, 0)] = new ChunkHash(adapter.ReadInt64(r, 1), adapter.ReadDecimal(r, 2));
             }
 
-            Metrics.AddQuery(result.Count);
+            Metrics.AddQuery(result.Count, Stopwatch.GetElapsedTime(started));
             return result;
         }
 
@@ -142,6 +145,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
 
         private async Task<IReadOnlyList<RowHash>> RowHashesAsync(DbCommand cmd, bool numericKey, CancellationToken ct)
         {
+            var started = Stopwatch.GetTimestamp();
             await using var _ = cmd;
             var rows = new List<RowHash>();
             await using var r = await cmd.ExecuteReaderAsync(ct);
@@ -152,12 +156,13 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
                 rows.Add(new RowHash(key, r.GetString(1)));
             }
 
-            Metrics.AddQuery(rows.Count);
+            Metrics.AddQuery(rows.Count, Stopwatch.GetElapsedTime(started));
             return rows;
         }
 
         public async Task<IReadOnlyList<RowFields>> GetRowFieldsAsync(TableSpec table, IReadOnlyList<string> keys, bool clientSide, CancellationToken ct)
         {
+            var started = Stopwatch.GetTimestamp();
             if (keys.Count == 0)
             {
                 return [];
@@ -193,12 +198,13 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
                 }
             }
 
-            Metrics.AddQuery(rows.Count);
+            Metrics.AddQuery(rows.Count, Stopwatch.GetElapsedTime(started));
             return rows;
         }
 
         public async IAsyncEnumerable<RowHash> StreamClientRowHashesAsync(TableSpec table, [EnumeratorCancellation] CancellationToken ct)
         {
+            var started = Stopwatch.GetTimestamp();
             await using var cmd = Command(D.RawRowsQuery(table));
             await using var r = await cmd.ExecuteReaderAsync(ct);
             adapter.Configure(r);
@@ -210,7 +216,7 @@ public sealed class DbRowSource(EngineAdapter adapter, CanonicalOptions options)
                 yield return new RowHash(KeyOf(fields, table), Canonicalizer.HexDigest(Canonicalizer.Row(fields), options.Hash));
             }
 
-            Metrics.AddQuery(n);
+            Metrics.AddQuery(n, Stopwatch.GetElapsedTime(started));
         }
 
         private string[] Canonicalise(DbDataReader r, TableSpec table)

@@ -36,7 +36,7 @@ public sealed record RowDiff(string Key, string DisplayKey, DiffKind Kind, strin
 
 public sealed record PhaseTimings(TimeSpan Stats, TimeSpan Fingerprint, TimeSpan DrillDown, TimeSpan Details, TimeSpan Total);
 
-public sealed record SideSummary(string Engine, long Rows, long Queries, long RowsTransferred);
+public sealed record SideSummary(string Engine, long Rows, long Queries, long RowsTransferred, TimeSpan Busy = default);
 
 public sealed record TableComparison(
     string Table,
@@ -62,8 +62,8 @@ public sealed record CompareOptions
 {
     public CompareStrategy Strategy { get; init; } = CompareStrategy.DatabaseSide;
 
-    /// <summary>Target rows per top-level chunk.</summary>
-    public long ChunkRows { get; init; } = 10_000;
+    /// <summary>Target rows per top-level chunk. 1,000 measured best on 1 M rows (docs/benchmarks.md): small chunks are cheap to group and keep drill-down small.</summary>
+    public long ChunkRows { get; init; } = 1_000;
 
     /// <summary>A mismatched range chunk with at most this many rows is fetched as row digests instead of split again.</summary>
     public long LeafRows { get; init; } = 1_000;
