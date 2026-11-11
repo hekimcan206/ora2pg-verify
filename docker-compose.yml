@@ -1,0 +1,88 @@
+# `docker compose up` runs the whole demo with zero manual steps (all data synthetic):
+#   oracle    Oracle Database 23ai Free; deploy/oracle/init creates APP_OWNER (source schema) and VERIFY_READER (read-only)
+#   postgres  PostgreSQL 17; deploy/postgres/init creates app_owner (target schema) and verify_reader (read-only)
+#   verify    ora2pg-verify demo: seeds both engines with the same synthetic data, injects recorded defects into
+#             PostgreSQL, scans the PL/SQL, compares every table, scores detection, runs the dual-write audit, writes
+#             /out/report.html and /out/report.json, prints DEMO_OK and exits 0
+#   report    serves the report at http://localhost:18090/report.html once verify has finished
+# DEMO_ROWS=1000000 docker compose up reproduces the benchmark size (about 2 minutes of loading on a laptop).
+name: ora2pg-verify
+
+services:
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-sys-dev-only}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-OwnerDev1}
+      READER_PASSWORD: ${READER_PASSWORD:-ReaderDev1}
+    ports:
+      - "127.0.0.1:${ORACLE_PORT:-25621}:1521"
+    volumes:
+      - ./deploy/oracle/init:/container-entrypoint-initdb.d:ro
+      - oradata:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+      start_period: 10s
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres-dev-only}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-OwnerDev1}
+      READER_PASSWORD: ${READER_PASSWORD:-ReaderDev1}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-25632}:5432"
+    volumes:
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d appdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  verify:
+    image: ora2pg-verify:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Read-only accounts for scan / compare / audit; owner accounts only seed and play the dual-writing application.
+      ORA2PGV_ORACLE: Data Source=oracle:1521/FREEPDB1;User Id=verify_reader;Password=${READER_PASSWORD:-ReaderDev1}
+      ORA2PGV_POSTGRES: Host=postgres;Database=appdb;Username=verify_reader;Password=${READER_PASSWORD:-ReaderDev1}
+      ORA2PGV_ORACLE_OWNER: Data Source=oracle:1521/FREEPDB1;User Id=app_owner;Password=${OWNER_PASSWORD:-OwnerDev1}
+      ORA2PGV_POSTGRES_OWNER: Host=postgres;Database=appdb;Username=app_owner;Password=${OWNER_PASSWORD:-OwnerDev1}
+    command: ["demo", "--rows", "${DEMO_ROWS:-200000}", "--seconds", "${DEMO_SECONDS:-20}", "--html", "/out/report.html", "--json", "/out/report.json"]
+    volumes:
+      - report:/out
+    depends_on:
+      oracle:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  report:
+    image: nginx:1.29.3-alpine
+    ports:
+      - "127.0.0.1:${REPORT_PORT:-18090}:80"
+    volumes:
+      # nocopy: the volume must take the ownership of the verify image's /out (non-root), not nginx's html folder.
+      - type: volume
+        source: report
+        target: /usr/share/nginx/html
+        read_only: true
+        volume:
+          nocopy: true
+    depends_on:
+      verify:
+        condition: service_completed_successfully
+
+volumes:
+  oradata:
+  pgdata:
+  report:

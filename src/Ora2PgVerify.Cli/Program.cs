@@ -164,7 +164,9 @@ demo.SetAction(async (p, ct) =>
 
     var report = new VerificationReport(RunInfoFrom(p, oracle, postgres, options) with { OracleSchema = SyntheticSchema.OracleSchema, PostgresSchema = SyntheticSchema.PostgresSchema },
         scanResult, mapping, tables, detection, auditSection);
-    await Workflows.WriteReportAsync(report, p.GetValue(htmlOpt) ?? "out/report.html", p.GetValue(jsonOpt) ?? "out/report.json", ct);
+    var htmlPath = p.GetValue(htmlOpt) ?? "out/report.html";
+    await Workflows.WriteReportAsync(report, htmlPath, p.GetValue(jsonOpt) ?? "out/report.json", ct);
+    await Workflows.WriteManifestAsync(manifest, Path.Combine(Path.GetDirectoryName(Path.GetFullPath(htmlPath))!, "manifest.json"), ct);
 
     var ok = detection is { FalseNegatives: 0, FalsePositives: 0 } && auditSection.Score is { FalseNegatives: 0, FalsePositives: 0 };
     Console.WriteLine($"dual-write: {auditSection.Score?.TruePositives}/{auditSection.Score?.Injected} faults confirmed, {auditSection.Score?.FalsePositives} false positives, {auditSection.Score?.Transients} transient differences ignored");
