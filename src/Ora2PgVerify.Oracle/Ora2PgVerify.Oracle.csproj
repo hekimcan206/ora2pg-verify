@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Ora2PgVerify.Oracle</RootNamespace>
+    <Description>Oracle adapter: ODP.NET row source, dictionary reader for the incompatibility scan, synthetic schema loader.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ora2PgVerify.Core\Ora2PgVerify.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Schema\*.sql" LogicalName="Ora2PgVerify.Oracle.Schema.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Ora2PgVerify.Postgres</RootNamespace>
+    <Description>PostgreSQL adapter: Npgsql row source, catalog reader, synthetic schema loader (binary COPY).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ora2PgVerify.Core\Ora2PgVerify.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Schema\*.sql" LogicalName="Ora2PgVerify.Postgres.Schema.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

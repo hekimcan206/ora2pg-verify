@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Ora2PgVerify.Core/Ora2PgVerify.Core.csproj" />
+    <Project Path="src/Ora2PgVerify.Oracle/Ora2PgVerify.Oracle.csproj" />
+    <Project Path="src/Ora2PgVerify.Postgres/Ora2PgVerify.Postgres.csproj" />
   </Folder>
 </Solution>
