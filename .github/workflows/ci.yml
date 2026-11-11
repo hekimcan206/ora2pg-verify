@@ -1,0 +1,176 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  build-test:
+    name: build & test (unit + Oracle/PostgreSQL integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      # Package versions are pinned and updated by hand, so a known vulnerability in any direct or
+      # transitive package fails the build. Fix it with a pinned upgrade in Directory.Packages.props.
+      - name: Audit for vulnerable packages
+        run: |
+          set -o pipefail
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable-packages.txt
+          if grep -q "has the following vulnerable packages" vulnerable-packages.txt; then
+            echo "::error::Known-vulnerable NuGet packages found (see the list above)"
+            exit 1
+          fi
+
+      - name: Format check
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build (warnings are errors)
+        run: dotnet build --no-restore --configuration Release
+
+      # Testcontainers pulls through the Docker API with a 100 s HTTP timeout; the Oracle image can take longer
+      # than that on a fresh runner, so both images are pulled up front, in parallel.
+      - name: Pre-pull integration test images
+        run: |
+          docker pull gvenzl/oracle-free:23-slim-faststart &
+          docker pull postgres:17-alpine &
+          wait
+
+      # Unit, FsCheck property and golden tests, then the integration suite against gvenzl/oracle-free:23-slim-faststart
+      # and postgres:17-alpine through Testcontainers (serial: one container per engine for the whole run).
+      - name: Test
+        run: >
+          dotnet test --no-build --configuration Release
+          --coverage --coverage-output-format cobertura
+          --results-directory "${{ github.workspace }}/TestResults"
+
+      - name: Coverage summary
+        if: always()
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.12
+        with:
+          reports: TestResults/**/*.cobertura.xml
+          targetdir: coverage
+          reporttypes: MarkdownSummaryGithub
+          assemblyfilters: "-*Tests*;-ora2pg-verify"
+          filefilters: "-*/obj/*"
+
+      - name: Publish coverage to job summary
+        if: always()
+        run: |
+          if [ -f coverage/SummaryGithub.md ]; then
+            cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No coverage report produced."
+          fi
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 7
+
+  container:
+    name: container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ora2pg-verify:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: The image runs as non-root and the CLI starts
+        run: |
+          user=$(docker image inspect ora2pg-verify:ci --format '{{.Config.User}}')
+          echo "Configured user: ${user}"
+          test -n "${user}" && test "${user}" != "0" && test "${user}" != "root"
+          docker run --rm ora2pg-verify:ci --help | grep -q "compare"
+          set +e
+          docker run --rm ora2pg-verify:ci scan
+          test $? -eq 2
+
+  compose-demo:
+    name: docker compose demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEMO_ROWS: "100000"
+      DEMO_SECONDS: "15"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Pre-pull images
+        run: |
+          docker pull gvenzl/oracle-free:23-slim-faststart &
+          docker pull postgres:17-alpine &
+          docker pull nginx:1.29.3-alpine &
+          wait
+
+      # The README promises `docker compose up` produces the HTML report with zero manual steps; this job keeps it true.
+      - name: Start the stack
+        run: docker compose up -d --build
+
+      - name: The demo finds every injected defect and confirms every dual-write fault
+        run: |
+          code=$(docker wait ora2pg-verify-verify-1)
+          docker compose logs verify | tee verify.log
+          test "$code" = "0"
+          grep -q "DEMO_OK" verify.log
+          grep -q "recall 100.0 %, precision 100.0 %" verify.log
+
+      - name: The report is served
+        run: |
+          for i in $(seq 1 30); do curl -fsS http://localhost:18090/report.html -o report.html && break; sleep 2; done
+          grep -q "Detection of injected defects" report.html
+          grep -q "Dual-write audit" report.html
+          grep -q "PL/SQL and schema incompatibilities" report.html
+          ! grep -q "ReaderDev1" report.html
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: demo-report
+          path: report.html
+          retention-days: 14
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
